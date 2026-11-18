@@ -18,10 +18,10 @@
 html,body{margin:0}
 body{background:var(--bg);color:var(--fg);font:15px/1.6 var(--body)}
 [hidden]{display:none!important}
-.wrap{max-width:1240px;margin:0 auto;padding:20px max(16px,env(safe-area-inset-right)) 48px max(16px,env(safe-area-inset-left))}
+.wrap{max-width:1440px;margin:0 auto;padding:20px max(16px,env(safe-area-inset-right)) 48px max(16px,env(safe-area-inset-left))}
 h1{font:400 30px/1.1 var(--display);margin:0;color:var(--accent)}
 .sub{color:var(--muted);font-size:13px;margin:4px 0 18px}
-.grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:18px;align-items:start}
+.grid{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:18px;align-items:start}
 @media (max-width:900px){.grid{grid-template-columns:minmax(0,1fr)}}
 .col{display:flex;flex-direction:column;gap:14px;min-width:0}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0}
@@ -46,9 +46,11 @@ button:disabled{opacity:.45;cursor:not-allowed}
 details{border:1px solid var(--line);border-radius:8px;padding:10px 12px;background:var(--sunk)}
 details summary{cursor:pointer;color:var(--muted);font-size:13px}
 details[open] summary{margin-bottom:10px}
-.ed{display:grid;grid-template-columns:minmax(0,1fr) 150px;gap:12px}
-@media (max-width:520px){.ed{grid-template-columns:minmax(0,1fr)}}
-.ed canvas{width:150px;aspect-ratio:9/16;border-radius:4px;background:#000;max-width:100%}
+.ed{display:flex;flex-direction:column;gap:10px}
+.tf{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:16px;align-items:start}
+@media (max-width:640px){.tf{grid-template-columns:minmax(0,1fr)}}
+.pv{display:flex;flex-direction:column;gap:6px;align-items:center;position:sticky;top:12px}
+.pv canvas{width:320px;max-width:100%;aspect-ratio:9/16;border-radius:8px;background:#000;border:1px solid var(--line)}
 .steps{display:flex;flex-direction:column;gap:7px;margin:0;padding:0;list-style:none}
 .steps li{display:grid;grid-template-columns:18px minmax(0,1fr) auto;gap:10px;align-items:center;font-size:14px;color:var(--muted)}
 .steps .dot{width:11px;height:11px;border-radius:50%;border:2px solid var(--line)}
@@ -99,6 +101,7 @@ details[open] summary{margin-bottom:10px}
 
       <section class="card">
         <span class="label">2 · 틀과 출처</span>
+        <div class="tf"><div class="col" style="gap:12px">
         <div class="row">
           <div class="f"><span class="label">틀</span><select id="frameSel"></select></div>
         </div>
@@ -115,7 +118,7 @@ details[open] summary{margin-bottom:10px}
                 <div class="f s"><span class="label">영상 높이</span><input type="number" id="fVh"></div>
                 <div class="f"><span class="label">영상 맞추기</span><select id="fFit"><option value="contain">그대로 (가로 다 보임)</option><option value="cover">꽉 채우기 (장면마다 얼굴 맞춤)</option></select></div>
               </div>
-              <div class="f"><span class="label">출처 양식 · {날짜} {방송} {채널} 을 바꿔 넣어요 · 줄바꿈 가능</span><textarea id="fTpl" rows="2"></textarea></div>
+              <div class="f"><span class="label">출처 양식 · 아래 날짜·방송·행사명·채널 칸 내용이 {날짜} {방송} {채널} 자리에 들어가요 · 줄바꿈 가능</span><textarea id="fTpl" rows="2"></textarea></div>
               <div class="row">
                 <div class="f s"><span class="label">출처 위치(px)</span><input type="number" id="fSy"></div>
                 <div class="f s"><span class="label">글자 크기</span><input type="number" id="fSs"></div>
@@ -124,15 +127,18 @@ details[open] summary{margin-bottom:10px}
               <div class="row"><button class="blue" id="fSave" type="button">이 틀 저장</button><button id="fNew" type="button">새 틀로</button><button id="fDel" type="button">이 틀 지우기</button></div>
               <p class="note">틀은 이 컴퓨터 브라우저에만 저장돼요. 다른 사람은 각자 넣어야 해요.</p>
             </div>
-            <canvas id="fPrev" width="270" height="480" aria-label="틀 미리보기"></canvas>
           </div>
         </details>
+        <p class="note">출처 모양은 틀마다 정해져 있어요. 여기엔 이번 영상의 내용만 쓰세요.</p>
         <div class="row">
           <div class="f s"><span class="label">날짜</span><input type="text" id="sDate" placeholder="261118"></div>
           <div class="f"><span class="label">방송·행사명</span><input type="text" id="sProg" placeholder="장윤선의 취재편의점"></div>
           <div class="f"><span class="label">채널</span><input type="text" id="sChan" placeholder="취재편의점"></div>
         </div>
         <p class="note" id="srcPrev"></p>
+        </div>
+        <div class="pv"><canvas id="fPrev" width="540" height="960" aria-label="틀 미리보기"></canvas><span class="note">미리보기 · 영상을 넣으면 그 화면이 들어가요</span></div>
+        </div>
       </section>
 
       <section class="card">
@@ -254,10 +260,11 @@ $('fSave').addEventListener('click',async()=>{
 $('fDel').addEventListener('click',async()=>{ if(!cur.id)return; if($('fDel').dataset.sure!=='1'){$('fDel').dataset.sure='1';$('fDel').textContent='한 번 더 누르면 지워져요';setTimeout(()=>{$('fDel').dataset.sure='';$('fDel').textContent='이 틀 지우기'},3000);return}
   await idbDel(cur.id); imgCache.delete(cur.id); $('fDel').dataset.sure=''; $('fDel').textContent='이 틀 지우기'; store.set('sf_frame',''); await loadFrames(); msg('틀을 지웠어요.') });
 $('frameSel').addEventListener('change',()=>{selectFrame();redrawThumbs()});
+$('fed').addEventListener('toggle',()=>drawPrev($('fed').open));
 
 /* ---------- 출처 ---------- */
 const today=()=>{const d=new Date();return String(d.getFullYear()).slice(2)+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0')};
-['sDate','sProg','sChan'].forEach(k=>{const v=store.get('sf_'+k); if(v&&k!=='sDate')$(k).value=v; $(k).addEventListener('input',()=>{store.set('sf_'+k,$(k).value);updSrc();drawPrev()})});
+['sDate','sProg','sChan'].forEach(k=>{const v=store.get('sf_'+k); if(v&&k!=='sDate')$(k).value=v; $(k).addEventListener('input',()=>{store.set('sf_'+k,$(k).value);updSrc();drawPrev($('fed').open)})});
 $('sDate').value=today();
 const srcText=f=>(f||cur).src.tpl.replaceAll('{날짜}',$('sDate').value.trim()).replaceAll('{방송}',$('sProg').value.trim()).replaceAll('{채널}',$('sChan').value.trim());
 function updSrc(){ $('srcPrev').textContent='들어갈 출처: '+srcText().replace(/\n/g,' / '); }
@@ -287,7 +294,7 @@ function compose(ctx,img,f,video,scale,crop){
 async function drawPrev(fromEditor){
   const f=fromEditor?{...cur,...editorFrame()}:cur; const cv=$('fPrev');
   let img; if(fromEditor&&editBlob){img=await new Promise(r=>{const i=new Image();i.onload=()=>r(i);i.src=URL.createObjectURL(editBlob)})} else img=await frameImg(cur);
-  compose(cv.getContext('2d'),img,f,$('v').src?$('v'):null,270/1080,null);
+  compose(cv.getContext('2d'),img,f,$('v').src?$('v'):null,540/1080,null);
 }
 $('v').addEventListener('seeked',()=>drawPrev($('fed').open));
 $('v').addEventListener('loadeddata',()=>drawPrev());
