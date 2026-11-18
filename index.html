@@ -196,59 +196,63 @@ const TF='https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.5.1/dist/tran
 const FACEAPI='https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.15/dist/face-api.js';
 const FACEMODEL='https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.15/model/';
 const MAXLEN=59;
-let file=null,url=null,clips=[],busy=false,lines=null,lastPrompt='',target=null;
+let file=null,url=null,clips=[],busy=false,lines=null,lastPrompt='',target=null,cur=null;
 const fmt=s=>{s=Math.max(0,s);const m=Math.floor(s/60),x=Math.floor(s%60);return `${m}:${String(x).padStart(2,'0')}`};
 const fmt1=s=>{s=Math.max(0,s);const m=Math.floor(s/60),x=(s%60).toFixed(1);return `${m}:${x.padStart(4,'0')}`};
 const step=(k,st,t)=>{const li=document.querySelector(`#steps li[data-k="${k}"]`);li.className=st||'';if(t!==undefined)li.querySelector('small').textContent=t};
 const msg=(t,err)=>{$('msg').textContent=t;$('msg').className='msg'+(err?' err':'')};
 const prog=p=>$('bar').style.width=(Math.max(0,Math.min(1,p))*100).toFixed(1)+'%';
 const seek=(v,t)=>new Promise(r=>{const f=()=>{v.removeEventListener('seeked',f);r()};v.addEventListener('seeked',f);v.currentTime=Math.max(0,t)});
-function refresh(){ $('go').disabled=!file||busy; $('saveall').disabled=!clips.length||busy; }
+function refresh(){ $('go').disabled=!file||busy||!(cur&&cur.id); $('saveall').disabled=!clips.length||busy; }
 
 /* ---------- 틀 저장소 (IndexedDB) ---------- */
 const PRESET={
   kimyong:{video:{y:620,h:608,fit:'contain'},src:{tpl:'{날짜}_{방송} @{채널}',y:1592,size:30,color:'#c8c8c8'}},
   kms:{video:{y:620,h:812,fit:'cover'},src:{tpl:'자료출처: {채널}\n{날짜}_{방송}',y:45,size:30,color:'#e2e6ee'}}
 };
-const BUILTIN={id:'kimyong',name:'유용한 김용 (기본)',builtIn:true,url:'frame_kimyong.png',who:'김용',...structuredClone(PRESET.kimyong)};
-let idb=null,frames=[],cur=null;const imgCache=new Map();
+const BLANK=()=>({id:null,name:'',who:'',blob:null,...structuredClone(PRESET.kimyong)});
+let idb=null,frames=[];const imgCache=new Map();
 function idbOpen(){return new Promise((res,rej)=>{const r=indexedDB.open('shorts-factory',1);r.onupgradeneeded=()=>r.result.createObjectStore('frames',{keyPath:'id'});r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
 const os=m=>idb.transaction('frames',m).objectStore('frames');
 const idbAll=()=>new Promise(r=>{const q=os('readonly').getAll();q.onsuccess=()=>r(q.result||[]);q.onerror=()=>r([])});
 const idbPut=o=>new Promise((r,j)=>{const q=os('readwrite').put(o);q.onsuccess=r;q.onerror=()=>j(q.error)});
 const idbDel=id=>new Promise(r=>{const q=os('readwrite').delete(id);q.onsuccess=r;q.onerror=r});
-function frameImg(f){ if(imgCache.has(f.id))return imgCache.get(f.id);
-  const im=new Image(); im.src=f.blob?URL.createObjectURL(f.blob):f.url; const p=new Promise(r=>{im.onload=()=>r(im);im.onerror=()=>r(null)}); imgCache.set(f.id,p); return p; }
+function frameImg(f){ if(!f||!f.blob)return Promise.resolve(null); if(imgCache.has(f.id))return imgCache.get(f.id);
+  const im=new Image(); im.src=URL.createObjectURL(f.blob); const p=new Promise(r=>{im.onload=()=>r(im);im.onerror=()=>r(null)}); imgCache.set(f.id,p); return p; }
 async function loadFrames(sel){
-  try{ idb=idb||await idbOpen(); frames=[BUILTIN,...(await idbAll())]; }catch(e){ frames=[BUILTIN]; }
-  $('frameSel').innerHTML=''; frames.forEach(f=>{const o=document.createElement('option');o.value=f.id;o.textContent=f.name;$('frameSel').appendChild(o)});
-  const want=sel||store.get('sf_frame')||'kimyong'; $('frameSel').value=frames.some(f=>f.id===want)?want:'kimyong'; selectFrame();
+  try{ idb=idb||await idbOpen(); frames=await idbAll(); }catch(e){ frames=[]; msg('이 브라우저에서는 틀을 저장할 수 없어요. 크롬이나 엣지 일반 창에서 열어 주세요.',true); }
+  frames.sort((a,b)=>a.name.localeCompare(b.name,'ko'));
+  $('frameSel').innerHTML=''; if(!frames.length){const o=document.createElement('option');o.value='';o.textContent='(아직 틀이 없어요. 아래에서 추가하세요)';$('frameSel').appendChild(o)}
+  frames.forEach(f=>{const o=document.createElement('option');o.value=f.id;o.textContent=f.name;$('frameSel').appendChild(o)});
+  const want=sel||store.get('sf_frame'); $('frameSel').value=frames.some(f=>f.id===want)?want:(frames[0]?.id||''); selectFrame();
+  if(!frames.length){$('fed').open=true;newFrame()}
 }
 function selectFrame(){
-  cur=frames.find(f=>f.id===$('frameSel').value)||BUILTIN; store.set('sf_frame',cur.id);
-  $('who').value=store.get('sf_who_'+cur.id)||cur.who||''; fillEditor(cur); updSrc(); drawPrev();
-  $('multiRow').hidden=cur.video.fit!=='cover';
+  cur=frames.find(f=>f.id===$('frameSel').value)||BLANK(); if(cur.id)store.set('sf_frame',cur.id);
+  $('who').value=(cur.id&&store.get('sf_who_'+cur.id))||cur.who||''; fillEditor(cur); updSrc(); drawPrev();
+  $('multiRow').hidden=cur.video.fit!=='cover'; refresh();
 }
 function fillEditor(f){
-  $('fName').value=f.builtIn?'':f.name; $('fWho').value=f.who||''; $('fVy').value=f.video.y; $('fVh').value=f.video.h; $('fFit').value=f.video.fit;
+  $('fName').value=f.name||''; $('fWho').value=f.who||''; $('fVy').value=f.video.y; $('fVh').value=f.video.h; $('fFit').value=f.video.fit;
   $('fTpl').value=f.src.tpl; $('fSy').value=f.src.y; $('fSs').value=f.src.size; $('fSc').value=f.src.color; $('fImg').value='';
-  $('fDel').disabled=!!f.builtIn; $('fPreset').value=f.video.fit==='cover'?'kms':'kimyong';
+  $('fDel').disabled=!f.id; delete $('fSave').dataset.new; $('fPreset').value=f.video.fit==='cover'?'kms':'kimyong';
 }
 let editBlob=null;
 function editorFrame(){ return {video:{y:+$('fVy').value||0,h:+$('fVh').value||608,fit:$('fFit').value},src:{tpl:$('fTpl').value,y:+$('fSy').value||0,size:+$('fSs').value||30,color:$('fSc').value||'#cccccc'}} }
 $('fPreset').addEventListener('change',()=>{const p=PRESET[$('fPreset').value];$('fVy').value=p.video.y;$('fVh').value=p.video.h;$('fFit').value=p.video.fit;$('fTpl').value=p.src.tpl;$('fSy').value=p.src.y;$('fSs').value=p.src.size;$('fSc').value=p.src.color;drawPrev(true)});
 ['fVy','fVh','fFit','fTpl','fSy','fSs','fSc'].forEach(k=>$(k).addEventListener('input',()=>drawPrev(true)));
 $('fImg').addEventListener('change',e=>{editBlob=e.target.files[0]||null;drawPrev(true)});
-$('fNew').addEventListener('click',()=>{editBlob=null;$('fImg').value='';$('fName').value='';$('fWho').value='';$('fDel').disabled=true;$('fSave').dataset.new='1';msg('새 틀: 이미지를 고르고 배치를 정한 뒤 저장하세요.')});
+function newFrame(){editBlob=null;$('fImg').value='';$('fName').value='';$('fWho').value='';$('fDel').disabled=true;$('fSave').dataset.new='1';drawPrev(true);msg('새 틀: 이름을 쓰고, 틀 이미지를 고르고, 배치를 정한 뒤 ‘이 틀 저장’을 누르세요.')}
+$('fNew').addEventListener('click',newFrame);
 $('fSave').addEventListener('click',async()=>{
-  const isNew=$('fSave').dataset.new==='1'||cur.builtIn; delete $('fSave').dataset.new;
+  const isNew=$('fSave').dataset.new==='1'||!cur.id;
   const name=$('fName').value.trim(); if(!name) return msg('틀 이름을 넣어 주세요.',true);
   let blob=editBlob||(isNew?null:cur.blob); if(!blob) return msg('틀 이미지를 골라 주세요.',true);
   const f={id:isNew?'f'+Date.now():cur.id,name,who:$('fWho').value.trim(),blob,...editorFrame()};
-  try{ idb=idb||await idbOpen(); await idbPut(f); imgCache.delete(f.id); editBlob=null; await loadFrames(f.id); msg('틀을 저장했어요: '+name); }catch(e){ msg('틀 저장 실패: '+e.message,true) }
+  try{ idb=idb||await idbOpen(); await idbPut(f); delete $('fSave').dataset.new; imgCache.delete(f.id); editBlob=null; await loadFrames(f.id); msg('틀을 저장했어요: '+name); }catch(e){ msg('틀 저장 실패: '+(e?.message||e),true) }
 });
-$('fDel').addEventListener('click',async()=>{ if(cur.builtIn)return; if($('fDel').dataset.sure!=='1'){$('fDel').dataset.sure='1';$('fDel').textContent='한 번 더 누르면 지워져요';setTimeout(()=>{$('fDel').dataset.sure='';$('fDel').textContent='이 틀 지우기'},3000);return}
-  await idbDel(cur.id); imgCache.delete(cur.id); $('fDel').dataset.sure=''; $('fDel').textContent='이 틀 지우기'; await loadFrames('kimyong'); msg('틀을 지웠어요.') });
+$('fDel').addEventListener('click',async()=>{ if(!cur.id)return; if($('fDel').dataset.sure!=='1'){$('fDel').dataset.sure='1';$('fDel').textContent='한 번 더 누르면 지워져요';setTimeout(()=>{$('fDel').dataset.sure='';$('fDel').textContent='이 틀 지우기'},3000);return}
+  await idbDel(cur.id); imgCache.delete(cur.id); $('fDel').dataset.sure=''; $('fDel').textContent='이 틀 지우기'; store.set('sf_frame',''); await loadFrames(); msg('틀을 지웠어요.') });
 $('frameSel').addEventListener('change',()=>{selectFrame();redrawThumbs()});
 
 /* ---------- 출처 ---------- */
@@ -293,7 +297,7 @@ function take(f){ if(!f||!(f.type.startsWith('video')||/\.(mp4|mov|m4v|mkv|webm)
   file=f; if(url) URL.revokeObjectURL(url); url=URL.createObjectURL(f);
   $('v').src=url; $('v').hidden=false; $('rv').src=url; $('av').src=url; lines=null; clips=[]; drawClips();
   $('drop').innerHTML=`<b>${f.name.replace(/[<>&]/g,'')}</b><br>${(f.size/1e6).toFixed(0)}MB · 다른 파일로 바꾸려면 누르세요`;
-  msg('준비됐어요. 틀·출처를 확인하고 ‘쇼츠 뽑기’를 누르세요.'); refresh(); }
+  msg(cur&&cur.id?'준비됐어요. 틀·출처를 확인하고 ‘쇼츠 뽑기’를 누르세요.':'영상은 준비됐어요. 먼저 틀을 추가해 주세요.'); refresh(); }
 $('file').addEventListener('change',e=>take(e.target.files[0]));
 const dr=$('drop'); dr.addEventListener('dragover',e=>{e.preventDefault();dr.classList.add('on')}); dr.addEventListener('dragleave',()=>dr.classList.remove('on'));
 dr.addEventListener('drop',e=>{e.preventDefault();dr.classList.remove('on');take(e.dataTransfer.files[0])});
@@ -303,7 +307,7 @@ $('aiMode').value=store.get('sf_ai')||'paste';
 function aiUI(){const m=$('aiMode').value;$('keyBox').hidden=m==='paste';$('aiKey').value=store.get('sf_key_'+m)||'';store.set('sf_ai',m)}
 $('aiMode').addEventListener('change',aiUI); $('aiKey').addEventListener('change',()=>store.set('sf_key_'+$('aiMode').value,$('aiKey').value.trim()));
 ['cnt','pad','multi'].forEach(k=>{const v=store.get('sf_'+k);if(v)$(k).value=v;$(k).addEventListener('change',()=>{store.set('sf_'+k,$(k).value);if(k==='pad')drawClips()})});
-$('who').addEventListener('change',()=>store.set('sf_who_'+cur.id,$('who').value));
+$('who').addEventListener('change',()=>{if(cur?.id)store.set('sf_who_'+cur.id,$('who').value)});
 
 /* ---------- 받아쓰기 (일꾼 여러 명) ---------- */
 const WORKER=`let asr=null;
