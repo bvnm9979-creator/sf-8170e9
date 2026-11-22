@@ -207,14 +207,17 @@ const TF='https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.5.1/dist/tran
 const FACEAPI='https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.15/dist/face-api.js';
 const FACEMODEL='https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.15/model/';
 const MAXLEN=59;
-let file=null,url=null,clips=[],busy=false,lines=null,lastPrompt='',target=null,cur=null;
+let file=null,url=null,clips=[],busy=false,making=false,savingIdx=-1,lines=null,lastPrompt='',target=null,cur=null;
 const fmt=s=>{s=Math.max(0,s);const m=Math.floor(s/60),x=Math.floor(s%60);return `${m}:${String(x).padStart(2,'0')}`};
 const fmt1=s=>{s=Math.max(0,s);const m=Math.floor(s/60),x=(s%60).toFixed(1);return `${m}:${x.padStart(4,'0')}`};
 const step=(k,st,t)=>{const li=document.querySelector(`#steps li[data-k="${k}"]`);li.className=st||'';if(t!==undefined)li.querySelector('small').textContent=t};
 const msg=(t,err)=>{$('msg').textContent=t;$('msg').className='msg'+(err?' err':'')};
 const prog=p=>$('bar').style.width=(Math.max(0,Math.min(1,p))*100).toFixed(1)+'%';
 const seek=(v,t)=>new Promise(r=>{const f=()=>{v.removeEventListener('seeked',f);r()};v.addEventListener('seeked',f);v.currentTime=Math.max(0,t)});
-function refresh(){ $('go').disabled=!file||busy||!(cur&&cur.id); $('saveall').disabled=!clips.length||busy; }
+function refresh(){ $('go').disabled=!file||busy||!(cur&&cur.id); $('saveall').disabled=!clips.length||busy;
+  document.querySelectorAll('.clip [data-a="save"]').forEach((b,i)=>{b.disabled=busy;
+    b.textContent=making?'쇼츠 만드는 중…':savingIdx===i?'저장 중…':savingIdx>=0?'차례 기다리는 중':busy?'잠시만요…':'저장'});
+  document.querySelectorAll('.clip .nudge button').forEach(b=>b.disabled=busy); }
 
 /* ---------- 틀 저장소 (IndexedDB) ---------- */
 const PRESET={
@@ -471,9 +474,10 @@ async function afterPick(picked){
   const pad=Math.max(0,Math.min(10,+$('pad').value||0)),dur=$('v').duration;
   clips=picked.map(c=>({...c,fs:Math.max(0,c.start-pad),fe:Math.min(dur,c.end+pad)}));
   drawClips();
-  if(cur.video.fit==='cover'){ step('frame','run','');
+  if(cur.video.fit==='cover'){ step('frame','run',''); making=true; refresh(); msg('쇼츠를 만드는 중이에요… 장면마다 화면 위치를 맞추고 있어요. 다 만들어지면 ‘저장’ 버튼이 켜져요.');
     try{ await loadFace(); for(let i=0;i<clips.length;i++){step('frame','run',`${i+1}/${clips.length}`);prog(0.85+0.15*i/clips.length);await frameClip(clips[i],cur);drawClips()} step('frame','done','') }
-    catch(e){ step('frame','fail','');msg('화면 맞추기를 못 했어요. 가운데로 잘라서 만들어요. ('+e.message+')',true) } }
+    catch(e){ step('frame','fail','');msg('화면 맞추기를 못 했어요. 가운데로 잘라서 만들어요. ('+e.message+')',true) }
+    finally{ making=false } }
   else step('frame','done','필요 없음');
   prog(1); msg(`${clips.length}개를 골랐어요. 미리보기로 확인하고 ‘저장’을 누르세요. 앞뒤 ${pad}초 여유가 붙어 있어요.`);
   busy=false; refresh();
@@ -525,7 +529,7 @@ async function act(i,a,el){
   if(a==='play'){const v=$('v');v.currentTime=c.fs;stopAt=c.fe;v.play().catch(()=>{});v.scrollIntoView({behavior:'smooth',block:'center'});return}
   if(a==='copy'){const t=`${c.title}\n\n${c.hashtags}`;try{await navigator.clipboard.writeText(t);r.textContent='복사했어요.'}catch(e){r.textContent=t}return}
   if(a.length===2){const k=a[0]==='s'?'start':'end';const d=a[1]==='+'?0.5:-0.5;c[k]=Math.max(0,c[k]+d);if(c.end-c.start<3)c[k]-=d;
-    if(c.scenes&&cur.video.fit==='cover'){busy=true;refresh();r.textContent='장면을 다시 맞추는 중…';const pad=+$('pad').value||0;c.fs=Math.max(0,c.start-pad);c.fe=Math.min($('v').duration,c.end+pad);await frameClip(c,cur).catch(()=>{});busy=false}
+    if(c.scenes&&cur.video.fit==='cover'){busy=true;making=true;refresh();r.textContent='장면을 다시 맞추는 중…';const pad=+$('pad').value||0;c.fs=Math.max(0,c.start-pad);c.fe=Math.min($('v').duration,c.end+pad);await frameClip(c,cur).catch(()=>{});busy=false;making=false}
     drawClips();return}
   if(a==='save') await saveClip(i,r);
 }
@@ -557,13 +561,13 @@ async function render(c,onp){
 }
 const safe=s=>(s||'쇼츠').replace(/[\\/:*?"<>|\n\r]/g,'').replace(/\s+/g,' ').trim().slice(0,30);
 async function saveClip(i,r){
-  if(busy)return;busy=true;refresh();const c=clips[i];
+  if(busy)return;busy=true;savingIdx=i;refresh();const c=clips[i];
   try{ r.textContent='만드는 중… (영상 길이만큼 걸려요. 탭을 닫거나 다른 탭으로 옮기지 마세요)';
     const blob=await render(c,p=>r.textContent=`만드는 중… ${Math.round(Math.max(0,Math.min(1,p))*100)}% (탭을 그대로 두세요)`);
     const ext=blob.type.includes('mp4')?'mp4':'webm',name=`${$('sDate').value||today()}_${String(i+1).padStart(2,'0')}_${safe(c.title)}.${ext}`;
     const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),60000);
     r.textContent=`저장했어요: ${name} (${(blob.size/1e6).toFixed(0)}MB)`;
-  }catch(e){r.textContent='저장 실패: '+(e?.message||e)}finally{busy=false;refresh()}
+  }catch(e){r.textContent='저장 실패: '+(e?.message||e)}finally{busy=false;savingIdx=-1;refresh()}
 }
 $('saveall').addEventListener('click',async()=>{const els=[...document.querySelectorAll('.clip')];for(let i=0;i<clips.length;i++)await saveClip(i,els[i].querySelector('[data-r]'))});
 
