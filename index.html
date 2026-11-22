@@ -189,6 +189,7 @@ details[open] summary{margin-bottom:10px}
   </div>
 </div>
 <video id="rv" class="hid" playsinline preload="auto" muted></video>
+<video id="tv" class="hid" playsinline preload="auto" muted></video>
 <video id="av" class="hid" playsinline preload="auto" muted></video>
 
 <script type="module">
@@ -318,7 +319,7 @@ $('v').addEventListener('loadeddata',()=>drawPrev());
 /* ---------- 영상 넣기 ---------- */
 function take(f){ if(!f||!(f.type.startsWith('video')||/\.(mp4|mov|m4v|mkv|webm)$/i.test(f.name))) return msg('영상 파일만 넣을 수 있어요.',true);
   file=f; if(url) URL.revokeObjectURL(url); url=URL.createObjectURL(f);
-  $('v').src=url; $('v').hidden=false; $('rv').src=url; $('av').src=url; lines=null; clips=[]; drawClips();
+  $('v').src=url; $('v').hidden=false; $('rv').src=url; $('tv').src=url; $('av').src=url; lines=null; clips=[]; drawClips();
   $('drop').innerHTML=`<b>${f.name.replace(/[<>&]/g,'')}</b><br>${(f.size/1e6).toFixed(0)}MB · 다른 파일로 바꾸려면 누르세요`;
   msg(cur&&cur.id?'준비됐어요. 틀·출처를 확인하고 ‘쇼츠 뽑기’를 누르세요.':'영상은 준비됐어요. 먼저 틀을 추가해 주세요.'); refresh(); }
 $('file').addEventListener('change',e=>take(e.target.files[0]));
@@ -512,7 +513,7 @@ function drawClips(){
 }
 const tq=[];let tbusy=false;
 function thumb(cv,c,t){tq.push([cv,c,t]);if(!tbusy)runThumbs()}
-async function runThumbs(){tbusy=true;const v=$('rv');const img=await frameImg(cur);
+async function runThumbs(){tbusy=true;const v=$('tv');const img=await frameImg(cur);
   while(tq.length){const [cv,c,t]=tq.shift();try{if(v.readyState<1)await new Promise(r=>v.addEventListener('loadedmetadata',r,{once:true}));await seek(v,t);compose(cv.getContext('2d'),img,cur,v,240/1080,cropAt(c,t))}catch(e){}}
   tbusy=false}
 function redrawThumbs(){ if(clips.length) drawClips(); }
@@ -542,12 +543,15 @@ async function render(c,onp){
   const rec=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:8_000_000,audioBitsPerSecond:192_000});
   const parts=[];rec.ondataavailable=e=>{if(e.data.size)parts.push(e.data)};const stopped=new Promise(r=>rec.onstop=r);
   const a=c.fs,b=c.fe,len=b-a; rv.pause(); await seek(rv,a); compose(ctx,img,cur,rv,1,cropAt(c,a));
-  let alive=true;
-  const loop=()=>{if(!alive)return;const t=rv.currentTime;compose(ctx,img,cur,rv,1,cropAt(c,t));onp((t-a)/len);
+  let alive=true,jump=false;
+  const loop=()=>{if(!alive)return;const t=rv.currentTime;
+    if(t<a-1||t>b+1){jump=true;alive=false;rv.pause();setTimeout(()=>rec.stop(),150);return}
+    compose(ctx,img,cur,rv,1,cropAt(c,t));onp((t-a)/len);
     if(t>=b||rv.ended){alive=false;rv.pause();setTimeout(()=>rec.stop(),150);return}
     rv.requestVideoFrameCallback?rv.requestVideoFrameCallback(loop):requestAnimationFrame(loop)};
   const now=ac2.currentTime;gain.gain.cancelScheduledValues(now);gain.gain.setValueAtTime(0,now);gain.gain.linearRampToValueAtTime(1,now+0.1);gain.gain.setValueAtTime(1,now+Math.max(0.2,len-0.2));gain.gain.linearRampToValueAtTime(0,now+len);
-  rec.start(1000); await rv.play(); loop(); await stopped;
+  const t0=performance.now(); rec.start(1000); await rv.play(); loop(); await stopped;
+  if(jump||(performance.now()-t0)/1000<len*0.9) throw new Error('녹화가 중간에 끊겼어요. 다시 ‘저장’을 눌러 주세요.');
   return new Blob(parts,{type:mime.split(';')[0]});
 }
 const safe=s=>(s||'쇼츠').replace(/[\\/:*?"<>|\n\r]/g,'').replace(/\s+/g,' ').trim().slice(0,30);
