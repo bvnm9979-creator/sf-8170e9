@@ -34,21 +34,21 @@ body{background:var(--bg);color:var(--fg);font:14px/1.55 var(--body);min-height:
 ::-webkit-scrollbar-thumb{background:var(--line-hi);border-radius:3px}
 [hidden]{display:none!important}
 
-/* 가로 퍼짐 방지: 한눈에 들어오는 1040px 고정 집중형 캔버스 */
-.wrap{max-width:1040px;margin:0 auto;padding:24px 24px 64px}
+/* 시원한 1280px 와이드 스튜디오 캔버스 */
+.wrap{max-width:1280px;margin:0 auto;padding:24px 28px 64px}
 
 /* 상단 바 */
 .top{display:flex;justify-content:space-between;align-items:center;gap:16px;padding-bottom:16px;border-bottom:1px solid var(--line);margin-bottom:20px}
 .brand{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
-h1{font:600 20px/1.2 var(--body);margin:0;color:var(--fg);letter-spacing:-.02em}
+h1{font:600 21px/1.2 var(--body);margin:0;color:var(--fg);letter-spacing:-.02em}
 .sub{color:var(--faint);font-size:13px;margin:0}
 .manual{color:var(--fg);background:var(--sunk);border:1px solid var(--line-hi);border-radius:6px;padding:6px 12px;font-weight:500;text-decoration:none;font-size:13px}
 .manual:hover{background:var(--hover);border-color:var(--muted)}
 
-/* 상단 작업대: 왼쪽(영상+틀 선택) + 오른쪽(미리보기+화면·출처 조절 316px) */
-.studio{display:grid;grid-template-columns:minmax(0,1fr) 316px;gap:16px;align-items:stretch;margin-bottom:16px}
-@media (max-width:860px){.studio{grid-template-columns:minmax(0,1fr)}}
-.col{display:flex;flex-direction:column;gap:16px;min-width:0}
+/* 상단 작업대: 왼쪽(영상+틀 선택) + 오른쪽(미리보기+화면·출처 조절 360px) */
+.studio{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:18px;align-items:stretch;margin-bottom:18px}
+@media (max-width:900px){.studio{grid-template-columns:minmax(0,1fr)}}
+.col{display:flex;flex-direction:column;gap:18px;min-width:0}
 
 .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px;display:flex;flex-direction:column;gap:14px;min-width:0}
 .card-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
@@ -92,8 +92,8 @@ button:disabled{opacity:.38;cursor:not-allowed}
 .utab:hover:not(:disabled){background:transparent;color:var(--muted);border-color:transparent}
 .utab.on{color:var(--fg);border-bottom-color:var(--fg);font-weight:600}
 
-/* 틀 썸네일 갤러리 (13개가 스크롤 없이 한눈에 들어오는 격자) */
-.fgallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(108px,1fr));gap:8px;padding:2px 0}
+/* 틀 썸네일 갤러리 (13개가 7열 2줄로 시원하게 한눈에 들어오는 격자) */
+.fgallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(108px,1fr));gap:10px;padding:2px 0}
 .fcard{background:var(--sunk);border:1px solid var(--line);border-radius:7px;padding:6px;cursor:pointer;display:flex;flex-direction:column;gap:6px;align-items:stretch;text-align:left;height:auto}
 .fcard:hover:not(:disabled){border-color:var(--line-hi);background:var(--hover)}
 .fcard.on{border-color:var(--fg);background:var(--hover)}
@@ -111,9 +111,9 @@ button:disabled{opacity:.38;cursor:not-allowed}
 .seg button.on{background:var(--fg);color:var(--bg);font-weight:600}
 
 /* 오른쪽 미리보기 + 화면·출처 패널 */
-.pv-card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:12px}
+.pv-card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px;display:flex;flex-direction:column;gap:12px}
 .pv-card .f{flex:0 0 auto}
-.pv-card canvas{width:236px;max-width:100%;aspect-ratio:9/16;border-radius:6px;background:#000;border:1px solid var(--line);display:block;margin:0 auto}
+.pv-card canvas{width:264px;max-width:100%;aspect-ratio:9/16;border-radius:6px;background:#000;border:1px solid var(--line);display:block;margin:0 auto}
 .src-line{font-size:12px;color:var(--muted);background:var(--sunk);border-radius:5px;padding:6px 9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
 .src-line b{color:var(--fg);font-weight:500}
 
