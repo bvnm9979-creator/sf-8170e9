@@ -155,9 +155,14 @@ details[open] summary{margin-bottom:12px;color:var(--fg)}
 .thumb-wrap:hover .thumb-play,.thumb-wrap.playing .thumb-play{opacity:1}
 .thumb-play span{background:rgba(15,15,18,.9);border:1px solid var(--line-hi);color:var(--fg);padding:4px 8px;border-radius:4px;font-size:11px;font-weight:500}
 
-.clip-head{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center}
-.clip .ttl{font-size:14px;font-weight:600;width:100%;background:var(--panel)}
-.clip .tg{font-size:12px;width:100%;color:var(--muted);background:var(--panel);height:30px}
+.clip-head{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.title-grid{display:flex;flex-direction:column;gap:6px}
+.trow{display:grid;grid-template-columns:96px minmax(0,1fr) auto;gap:8px;align-items:center}
+@media (max-width:540px){.trow{grid-template-columns:minmax(0,1fr)}}
+.trow .tlbl{font-size:12px;color:var(--muted);font-weight:500}
+.clip .sttl{font-size:13.5px;font-weight:600;width:100%;background:var(--panel);color:var(--accent)}
+.clip .ttl{font-size:13.5px;font-weight:600;width:100%;background:var(--panel)}
+.clip .tg{font-size:12px;width:100%;color:var(--muted);background:var(--panel);height:32px}
 
 .meta{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;align-items:center}
 .meta b{color:var(--fg);font-weight:500}
@@ -740,13 +745,14 @@ function buildPrompt(){
 - 한 대목은 이야기가 완결되게 30~${MAXLEN}초. 절대 ${MAXLEN}초를 넘기지 마세요.
 - 시작과 끝은 줄 경계에 맞추고, 말 도중에 시작하거나 끊기지 않게 하세요. end는 마지막으로 넣을 줄의 다음 줄 시작 초로 하세요.
 - 대목끼리 겹치지 않게 하세요.
-- title: 유튜브 게시물 제목. 40자 안팎. 실제 발언에 없는 사실이나 과장은 금지.
+- short_title: 쇼츠 영상 화면 안(상단 제목 칸)에 넣을 짧은 제목. 핵심 문구 1~2줄(줄바꿈은 " / "로 표시, 한 줄 12자 안팎).
+- title: 유튜브에 게시할 때 쓰는 업로드 제목. 40자 안팎. 실제 발언에 없는 사실이나 과장은 금지.
 - hashtags: 공백으로 구분한 7개, #Shorts 포함.
 - why: 왜 골랐는지 한 문장.
 - risk: 올리기 전에 확인할 점(이름이 불확실함, 민감한 표현 등). 없으면 빈 문자열.
 
 JSON 배열만 답하세요. 설명이나 다른 말은 쓰지 마세요.
-[{"start":초,"end":초,"title":"","hashtags":"","why":"","risk":""}]
+[{"start":초,"end":초,"short_title":"","title":"","hashtags":"","why":"","risk":""}]
 
 받아쓴 글:
 ${text}`;
@@ -761,7 +767,7 @@ function parseAnswer(t){ t=t.replace(/```(json)?/gi,'').replace(/,\s*([\]}])/g,'
   if(!Array.isArray(arr))arr=[arr];
   const ok=arr.map(c=>({...c,start:toSec(c.start),end:toSec(c.end)})).filter(c=>isFinite(c.start)&&isFinite(c.end)&&c.end>c.start&&c.start<dur);
   dropped=arr.length-ok.length; if(!ok.length)throw new Error('유효한 시간 구간이 없습니다.');
-  return ok.map(c=>({title:c.title||'',hashtags:c.hashtags||'',why:c.why||'',risk:c.risk||'',start:Math.max(0,c.start),end:Math.min(dur,c.start+Math.min(MAXLEN,c.end-c.start))})).sort((a,b)=>a.start-b.start) }
+  return ok.map(c=>({short_title:c.short_title||c.in_title||c.hook||'',title:c.title||'',hashtags:c.hashtags||'',why:c.why||'',risk:c.risk||'',start:Math.max(0,c.start),end:Math.min(dur,c.start+Math.min(MAXLEN,c.end-c.start))})).sort((a,b)=>a.start-b.start) }
 async function askAPI(prompt){
   const mode=$('aiMode').value,key=$('aiKey').value.trim(); if(!key) throw new Error('API 열쇠를 입력하세요.'); store.set('sf_key_'+mode,key);
   if(mode==='gemini'){
@@ -857,23 +863,26 @@ function drawClips(){
     el.innerHTML=`<div class="thumb-wrap" data-a="play" title="미리보기 재생"><canvas width="240" height="427" data-a="play"></canvas><div class="thumb-play"><span data-a="play">미리보기</span></div></div>
     <div class="col" style="gap:8px">
       <div class="clip-head">
-        <input type="text" class="ttl" aria-label="제목">
+        <div class="meta">
+          <span><b>#${String(i+1).padStart(2,'0')}</b></span>
+          <span>구간 <b>${fmt(c.start)} ~ ${fmt(c.end)}</b></span>
+          <span class="${core>MAXLEN?'over':''}">본문 <b>${core.toFixed(1)}초</b></span>
+          <span>파일 전체 <b>${(c.fe-c.fs).toFixed(1)}초</b> (편집점 ${fmt1(c.start-c.fs)} ~ ${fmt1(c.end-c.fs)})</span>
+        </div>
         <div class="acts">
           <button data-a="play">미리보기</button>
-          <button data-a="copy">제목·태그 복사</button>
+          <button data-a="copy">전체 복사</button>
           <button data-a="del">제외</button>
           <button class="blue" data-a="save">저장</button>
         </div>
       </div>
-      <div class="meta">
-        <span><b>#${String(i+1).padStart(2,'0')}</b></span>
-        <span>구간 <b>${fmt(c.start)} ~ ${fmt(c.end)}</b></span>
-        <span class="${core>MAXLEN?'over':''}">본문 <b>${core.toFixed(1)}초</b></span>
-        <span>파일 전체 <b>${(c.fe-c.fs).toFixed(1)}초</b> (편집점 ${fmt1(c.start-c.fs)} ~ ${fmt1(c.end-c.fs)})</span>
-      </div>
       <div class="tbar"><div class="tbar-pad" style="left:${pL}%;width:${pW}%"></div><div class="tbar-core" style="left:${cL}%;width:${cW}%"></div></div>
+      <div class="title-grid">
+        <div class="trow"><span class="tlbl">쇼츠 내 제목</span><input type="text" class="sttl" aria-label="쇼츠 내 제목"><button class="sm-btn" data-a="copy-s">복사</button></div>
+        <div class="trow"><span class="tlbl">유튜브 게시 제목</span><input type="text" class="ttl" aria-label="유튜브 게시 제목"><button class="sm-btn" data-a="copy-t">복사</button></div>
+        <div class="trow"><span class="tlbl">해시태그</span><input type="text" class="tg" aria-label="해시태그"><button class="sm-btn" data-a="copy-g">복사</button></div>
+      </div>
       <p class="why"></p>
-      <input type="text" class="tg" aria-label="해시태그">
       <div class="nudge-row">
         <div class="nudge"><span>시작점</span><button data-a="s-2">−2s</button><button data-a="s-0.5">−0.5s</button><button data-a="s+0.5">+0.5s</button><button data-a="s+2">+2s</button></div>
         <div class="nudge"><span>종료점</span><button data-a="e-2">−2s</button><button data-a="e-0.5">−0.5s</button><button data-a="e+0.5">+0.5s</button><button data-a="e+2">+2s</button></div>
@@ -881,8 +890,13 @@ function drawClips(){
       <div class="scenes"></div>
       <small class="msg" data-r></small>
     </div>`;
-    const ti=el.querySelector('.ttl'),tg=el.querySelector('.tg'); ti.value=c.title||''; ti.placeholder='제목 입력 (저장 파일명)'; tg.value=c.hashtags||'';
-    ti.addEventListener('input',()=>{c.title=ti.value;saveState()}); tg.addEventListener('input',()=>{c.hashtags=tg.value;saveState()});
+    const sti=el.querySelector('.sttl'),ti=el.querySelector('.ttl'),tg=el.querySelector('.tg');
+    sti.value=c.short_title||''; sti.placeholder='쇼츠 영상 안에 넣을 짧은 제목 (예: “검찰이 털어간 컴퓨터엔 / 엑셀 하나뿐”)';
+    ti.value=c.title||''; ti.placeholder='유튜브 게시물 제목 (저장 파일명으로도 쓰입니다)';
+    tg.value=c.hashtags||''; tg.placeholder='#해시태그 #Shorts';
+    sti.addEventListener('input',()=>{c.short_title=sti.value;saveState()});
+    ti.addEventListener('input',()=>{c.title=ti.value;saveState()});
+    tg.addEventListener('input',()=>{c.hashtags=tg.value;saveState()});
     const whyEl=el.querySelector('.why');
     whyEl.textContent=c.why||'';
     if(c.risk){const rb=document.createElement('span');rb.className='risk-line';rb.textContent='· 확인: '+c.risk;whyEl.appendChild(rb)}
@@ -926,7 +940,10 @@ async function act(i,a,el){
   if(a==='play'){previewClip(c,el);return}
   if(a==='del'){const b=el.querySelector('[data-a="del"]');if(b.dataset.sure!=='1'){b.dataset.sure='1';b.textContent='한 번 더 누르면 제외';setTimeout(()=>{b.dataset.sure='';b.textContent='제외'},3000);return}
     clearTimeout(c._t);clips.splice(i,1);drawClips();saveState();return}
-  if(a==='copy'){const t=`${c.title}\n\n${c.hashtags}`;try{await navigator.clipboard.writeText(t);r.textContent='제목·태그 복사됨'}catch(e){r.textContent=t}return}
+  if(a==='copy'){const t=[c.short_title?`[쇼츠 내 제목]\n${c.short_title}`:'',`[유튜브 게시 제목]\n${c.title||''}`,c.hashtags||''].filter(Boolean).join('\n\n');try{await navigator.clipboard.writeText(t);r.textContent='쇼츠 내 제목·유튜브 제목·태그 전체 복사됨'}catch(e){r.textContent=t}return}
+  if(a==='copy-s'){try{await navigator.clipboard.writeText(c.short_title||'');r.textContent='쇼츠 내 제목 복사됨'}catch(e){}return}
+  if(a==='copy-t'){try{await navigator.clipboard.writeText(c.title||'');r.textContent='유튜브 게시 제목 복사됨'}catch(e){}return}
+  if(a==='copy-g'){try{await navigator.clipboard.writeText(c.hashtags||'');r.textContent='해시태그 복사됨'}catch(e){}return}
   if(/^[se][+-]/.test(a)){const k=a[0]==='s'?'start':'end',d=+a.slice(1),dur=$('v').duration||1e9,old=c[k];
     c[k]=Math.max(0,Math.min(dur,c[k]+d)); if(c.end-c.start<3)c[k]=old; if(c[k]===old)return;
     drawClips(); saveState(); const nel=$('clips').children[i]; if(nel)reframeLater(c,nel); return}
