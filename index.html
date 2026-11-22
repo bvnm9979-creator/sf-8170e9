@@ -121,6 +121,7 @@ details[open] summary{margin-bottom:10px}
                 <div class="f s"><span class="label">영상 높이</span><input type="number" id="fVh"></div>
                 <div class="f"><span class="label">영상 맞추기</span><select id="fFit"><option value="contain">그대로 (가로 다 보임)</option><option value="cover">꽉 채우기 (장면마다 얼굴 맞춤)</option></select></div>
               </div>
+              <div class="row"><div class="f"><span class="label">영상 확대 · <b id="fZv">100%</b> (영상만 커지고 틀은 그대로)</span><input type="range" id="fZ" min="100" max="250" step="5" value="100" aria-label="영상 확대"></div></div>
               <div class="f"><span class="label">출처 양식 · 아래 날짜·방송·행사명·채널 칸 내용이 {날짜} {방송} {채널} 자리에 들어가요 · 줄바꿈 가능</span><textarea id="fTpl" rows="2"></textarea></div>
               <div class="row">
                 <div class="f s"><span class="label">출처 위치(px)</span><input type="number" id="fSy"></div>
@@ -242,14 +243,14 @@ function selectFrame(){
   $('multiRow').hidden=cur.video.fit!=='cover'; refresh();
 }
 function fillEditor(f){
-  $('fName').value=f.name||''; $('fWho').value=f.who||''; $('fVy').value=f.video.y; $('fVh').value=f.video.h; $('fFit').value=f.video.fit;
+  $('fName').value=f.name||''; $('fWho').value=f.who||''; $('fVy').value=f.video.y; $('fVh').value=f.video.h; $('fFit').value=f.video.fit; $('fZ').value=Math.round((f.video.zoom||1)*100); $('fZv').textContent=$('fZ').value+'%';
   $('fTpl').value=f.src.tpl; $('fSy').value=f.src.y; $('fSs').value=f.src.size; $('fSc').value=f.src.color; $('fImg').value='';
   $('fDel').disabled=!f.id; delete $('fSave').dataset.new; $('fPreset').value=f.video.fit==='cover'?'kms':'kimyong';
 }
 let editBlob=null;
-function editorFrame(){ return {video:{y:+$('fVy').value||0,h:+$('fVh').value||608,fit:$('fFit').value},src:{tpl:$('fTpl').value,y:+$('fSy').value||0,size:+$('fSs').value||30,color:$('fSc').value||'#cccccc'}} }
-$('fPreset').addEventListener('change',()=>{const p=PRESET[$('fPreset').value];$('fVy').value=p.video.y;$('fVh').value=p.video.h;$('fFit').value=p.video.fit;$('fTpl').value=p.src.tpl;$('fSy').value=p.src.y;$('fSs').value=p.src.size;$('fSc').value=p.src.color;drawPrev(true)});
-['fVy','fVh','fFit','fTpl','fSy','fSs','fSc'].forEach(k=>$(k).addEventListener('input',()=>drawPrev(true)));
+function editorFrame(){ return {video:{y:+$('fVy').value||0,h:+$('fVh').value||608,fit:$('fFit').value,zoom:(+$('fZ').value||100)/100},src:{tpl:$('fTpl').value,y:+$('fSy').value||0,size:+$('fSs').value||30,color:$('fSc').value||'#cccccc'}} }
+$('fPreset').addEventListener('change',()=>{const p=PRESET[$('fPreset').value];$('fVy').value=p.video.y;$('fVh').value=p.video.h;$('fFit').value=p.video.fit;$('fZ').value=100;$('fZv').textContent='100%';$('fTpl').value=p.src.tpl;$('fSy').value=p.src.y;$('fSs').value=p.src.size;$('fSc').value=p.src.color;drawPrev(true)});
+['fVy','fVh','fFit','fZ','fTpl','fSy','fSs','fSc'].forEach(k=>$(k).addEventListener('input',()=>{$('fZv').textContent=$('fZ').value+'%';drawPrev(true)}));
 $('fImg').addEventListener('change',e=>{editBlob=e.target.files[0]||null;drawPrev(true)});
 function newFrame(){editBlob=null;$('fImg').value='';$('fName').value='';$('fWho').value='';$('fDel').disabled=true;$('fSave').dataset.new='1';drawPrev(true);msg('새 틀: 이름을 쓰고, 틀 이미지를 고르고, 배치를 정한 뒤 ‘이 틀 저장’을 누르세요.')}
 $('fNew').addEventListener('click',newFrame);
@@ -280,15 +281,13 @@ function compose(ctx,img,f,video,scale,crop){
   const {y,h,fit}=f.video;
   if(video&&video.videoWidth){
     const vw=video.videoWidth,vh=video.videoHeight;
-    if(fit==='cover'&&(!crop||crop.mode!=='all')){
-      const sc=Math.max(1080/vw,h/vh), sw=1080/sc, sh=h/sc; const cx=(crop?.cx??0.5)*vw;
-      const sx=Math.min(Math.max(0,cx-sw/2),vw-sw), sy=(vh-sh)/2;
-      ctx.drawImage(video,sx,sy,sw,sh,0,y*S,1080*S,h*S);
-    }else{
-      const sc=Math.min(1080/vw,h/vh), w=vw*sc, hh=vh*sc;
-      if(fit==='cover'){ctx.fillStyle='#000';ctx.fillRect(0,y*S,1080*S,h*S)}
-      ctx.drawImage(video,(1080-w)/2*S,(y+(h-hh)/2)*S,w*S,hh*S);
-    }
+    const full=fit==='cover'&&(!crop||crop.mode!=='all'), z=Math.max(1,f.video.zoom||1);
+    if(fit==='cover'&&!full){ctx.fillStyle='#000';ctx.fillRect(0,y*S,1080*S,h*S)}
+    const sc=(full?Math.max(1080/vw,h/vh):Math.min(1080/vw,h/vh))*z;
+    const dw=Math.min(1080,vw*sc), dh=Math.min(h,vh*sc), sw=dw/sc, sh=dh/sc;
+    const cx=(full?(crop?.cx??0.5):0.5)*vw;
+    const sx=Math.min(Math.max(0,cx-sw/2),vw-sw), sy=(vh-sh)/2;
+    ctx.drawImage(video,sx,sy,sw,sh,(1080-dw)/2*S,(y+(h-dh)/2)*S,dw*S,dh*S);
   }
   const t=srcText(f); if(t.trim()){ const ls=t.split('\n'), size=f.src.size, gap=size*1.3;
     ctx.fillStyle=f.src.color; ctx.font=`${size*S}px "GmarketSansLight","Noto Sans KR",sans-serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
