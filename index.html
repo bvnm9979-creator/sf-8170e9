@@ -547,23 +547,38 @@ async function render(c,onp){
   const mime=pickMime(); if(!mime) throw new Error('이 브라우저는 영상 저장을 못 해요. 크롬이나 엣지에서 열어 주세요.');
   const rec=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:8_000_000,audioBitsPerSecond:192_000});
   const parts=[];rec.ondataavailable=e=>{if(e.data.size)parts.push(e.data)};const stopped=new Promise(r=>rec.onstop=r);
-  const a=c.fs,b=c.fe,len=b-a; rv.pause(); await seek(rv,a); compose(ctx,img,cur,rv,1,cropAt(c,a));
-  let alive=true,jump=false;
-  const loop=()=>{if(!alive)return;const t=rv.currentTime;
-    if(t<a-1||t>b+1){jump=true;alive=false;rv.pause();setTimeout(()=>rec.stop(),150);return}
-    compose(ctx,img,cur,rv,1,cropAt(c,t));onp((t-a)/len);
-    if(t>=b||rv.ended){alive=false;rv.pause();setTimeout(()=>rec.stop(),150);return}
-    rv.requestVideoFrameCallback?rv.requestVideoFrameCallback(loop):requestAnimationFrame(loop)};
-  const now=ac2.currentTime;gain.gain.cancelScheduledValues(now);gain.gain.setValueAtTime(0,now);gain.gain.linearRampToValueAtTime(1,now+0.1);gain.gain.setValueAtTime(1,now+Math.max(0.2,len-0.2));gain.gain.linearRampToValueAtTime(0,now+len);
-  const t0=performance.now(); rec.start(1000); await rv.play(); loop(); await stopped;
-  if(jump||(performance.now()-t0)/1000<len*0.9) throw new Error('녹화가 중간에 끊겼어요. 다시 ‘저장’을 눌러 주세요.');
+  const a=c.fs,b=c.fe,len=b-a; rv.pause(); await seek(rv,a); gain.gain.value=0; compose(ctx,img,cur,rv,1,cropAt(c,a));
+  let alive=true,fail='',lastT=-1,lastMove=performance.now();
+  const wurl=URL.createObjectURL(new Blob(['setInterval(()=>postMessage(0),33)'],{type:'text/javascript'}));
+  const tick=new Worker(wurl); // 탭이 가려져도 느려지지 않는 시계
+  const end=why=>{if(!alive)return;alive=false;fail=why||'';tick.terminate();URL.revokeObjectURL(wurl);document.removeEventListener('visibilitychange',vis);rv.pause();gain.gain.value=0;setTimeout(()=>{try{rec.stop()}catch(e){}},150)};
+  const vis=()=>{if(alive&&document.hidden)end('__hidden')}; // 가려지면 버리고 처음부터 다시(멈춘 구간이 파일에 섞이지 않게)
+  document.addEventListener('visibilitychange',vis);
+  const step=()=>{if(!alive)return;const t=rv.currentTime,now=performance.now();
+    if(t<a-1||t>b+1)return end('녹화가 중간에 끊겼어요. 다시 ‘저장’을 눌러 주세요.');
+    if(t!==lastT){lastT=t;lastMove=now}
+    else if(now-lastMove>8000)return end('영상이 8초 넘게 멈춰서 저장을 그만뒀어요. 새로고침하고 다시 ‘저장’을 눌러 주세요.');
+    else if(rv.paused&&!rv.ended&&now-lastMove>500)rv.play().catch(()=>{});
+    const k=t-a;gain.gain.value=Math.max(0,Math.min(1,k/0.1,(len-k)/0.2));
+    compose(ctx,img,cur,rv,1,cropAt(c,t));onp(k/len);
+    if(t>=b||rv.ended)end()};
+  tick.onmessage=step;
+  rec.start(1000);
+  await rv.play();
+  await stopped;
+  if(fail) throw new Error(fail);
   return new Blob(parts,{type:mime.split(';')[0]});
 }
 const safe=s=>(s||'쇼츠').replace(/[\\/:*?"<>|\n\r]/g,'').replace(/\s+/g,' ').trim().slice(0,30);
 async function saveClip(i,r){
   if(busy)return;busy=true;savingIdx=i;refresh();const c=clips[i];
   try{ r.textContent='만드는 중… (영상 길이만큼 걸려요. 탭을 닫거나 다른 탭으로 옮기지 마세요)';
-    const blob=await render(c,p=>r.textContent=`만드는 중… ${Math.round(Math.max(0,Math.min(1,p))*100)}% (탭을 그대로 두세요)`);
+    let blob=null;
+    while(!blob){
+      if(document.hidden){r.textContent='잠깐 멈춤 — 이 탭이 가려져 있어요. 이 탭으로 돌아오면 처음부터 다시 만들어요.';await new Promise(ok=>{const f=()=>{if(!document.hidden){document.removeEventListener('visibilitychange',f);ok()}};document.addEventListener('visibilitychange',f)})}
+      try{blob=await render(c,p=>r.textContent=`만드는 중… ${Math.round(Math.max(0,Math.min(1,p))*100)}% (다 될 때까지 이 탭을 화면에 띄워 두세요)`)}
+      catch(e){if(e.message!=='__hidden')throw e}
+    }
     const ext=blob.type.includes('mp4')?'mp4':'webm',name=`${$('sDate').value||today()}_${String(i+1).padStart(2,'0')}_${safe(c.title)}.${ext}`;
     const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),60000);
     r.textContent=`저장했어요: ${name} (${(blob.size/1e6).toFixed(0)}MB)`;
