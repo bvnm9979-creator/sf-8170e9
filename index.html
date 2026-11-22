@@ -234,19 +234,26 @@ const PRESET={
   kms:{video:{y:620,h:812,fit:'cover'},src:{tpl:'자료출처: {채널}\n{날짜}_{방송}',y:45,size:30,color:'#e2e6ee'}}
 };
 const BLANK=()=>({id:null,name:'',who:'',blob:null,...structuredClone(PRESET.kimyong)});
+// 사이트에 들어 있는 기본 틀 (frames/ 폴더). 고쳐 저장하면 이 컴퓨터에 내 설정으로 덮어써져요
+const BUILTIN=[{"id":"b01","name":"유용한김용 · 16:9 · 흰 종이","who":"김용","file":"frames/b01.webp","video":{"y":653,"h":614,"fit":"cover"},"src":{"tpl":"{날짜}_{방송} @{채널}","y":1592,"size":30,"color":"#4a4a4a"}},{"id":"b02","name":"유용한김용 · 16:9 · 남색","who":"김용","file":"frames/b02.webp","video":{"y":653,"h":614,"fit":"cover"},"src":{"tpl":"{날짜}_{방송} @{채널}","y":1592,"size":30,"color":"#c8c8c8"}},{"id":"b03","name":"유용한김용 · 4:3 · 흰 종이","who":"김용","file":"frames/b03.webp","video":{"y":617,"h":814,"fit":"cover"},"src":{"tpl":"{날짜}_{방송} @{채널}","y":1765,"size":30,"color":"#4a4a4a"}},{"id":"b04","name":"유용한김용 · 4:3 · 남색","who":"김용","file":"frames/b04.webp","video":{"y":617,"h":814,"fit":"cover"},"src":{"tpl":"{날짜}_{방송} @{채널}","y":1765,"size":30,"color":"#c8c8c8"}},{"id":"b05","name":"총명김민석 · 16:9 · 검정","who":"김민석","file":"frames/b05.webp","video":{"y":653,"h":614,"fit":"cover"},"src":{"tpl":"자료출처: {채널}\n{날짜}_{방송}","y":45,"size":30,"color":"#e2e6ee"}},{"id":"b06","name":"총명김민석 · 16:9 · 남색 결","who":"김민석","file":"frames/b06.webp","video":{"y":653,"h":614,"fit":"cover"},"src":{"tpl":"자료출처: {채널}\n{날짜}_{방송}","y":45,"size":30,"color":"#e2e6ee"}},{"id":"b07","name":"총명김민석 · 4:3 · 남색 결","who":"김민석","file":"frames/b07.webp","video":{"y":617,"h":814,"fit":"cover"},"src":{"tpl":"자료출처: {채널}\n{날짜}_{방송}","y":45,"size":30,"color":"#e2e6ee"}},{"id":"b08","name":"총명김민석 · 4:3 · 흰 종이","who":"김민석","file":"frames/b08.webp","video":{"y":617,"h":814,"fit":"cover"},"src":{"tpl":"자료출처: {채널}\n{날짜}_{방송}","y":45,"size":30,"color":"#4a4a4a"}},{"id":"b09","name":"총명김민석 · 4:3 · 검정 1","who":"김민석","file":"frames/b09.webp","video":{"y":617,"h":814,"fit":"cover"},"src":{"tpl":"자료출처: {채널}\n{날짜}_{방송}","y":45,"size":30,"color":"#e2e6ee"}},{"id":"b10","name":"총명김민석 · 4:3 · 검정 2","who":"김민석","file":"frames/b10.webp","video":{"y":617,"h":814,"fit":"cover"},"src":{"tpl":"자료출처: {채널}\n{날짜}_{방송}","y":45,"size":30,"color":"#e2e6ee"}},{"id":"b11","name":"총명김민석 · 4:3 · 흰 종이 2","who":"김민석","file":"frames/b11.webp","video":{"y":617,"h":814,"fit":"cover"},"src":{"tpl":"자료출처: {채널}\n{날짜}_{방송}","y":45,"size":30,"color":"#4a4a4a"}},{"id":"b12","name":"총명김민석 · 4:3 · 남색 결 2","who":"김민석","file":"frames/b12.webp","video":{"y":617,"h":814,"fit":"cover"},"src":{"tpl":"자료출처: {채널}\n{날짜}_{방송}","y":45,"size":30,"color":"#e2e6ee"}},{"id":"b13","name":"총명김민석 · 4:3 · 국회 밤","who":"김민석","file":"frames/b13.webp","video":{"y":617,"h":814,"fit":"cover"},"src":{"tpl":"자료출처: {채널}\n{날짜}_{방송}","y":45,"size":30,"color":"#e2e6ee"}}];
 let idb=null,frames=[];const imgCache=new Map();
 function idbOpen(){return new Promise((res,rej)=>{const r=indexedDB.open('shorts-factory',1);r.onupgradeneeded=()=>r.result.createObjectStore('frames',{keyPath:'id'});r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
 const os=m=>idb.transaction('frames',m).objectStore('frames');
 const idbAll=()=>new Promise(r=>{const q=os('readonly').getAll();q.onsuccess=()=>r(q.result||[]);q.onerror=()=>r([])});
 const idbPut=o=>new Promise((r,j)=>{const q=os('readwrite').put(o);q.onsuccess=r;q.onerror=()=>j(q.error)});
 const idbDel=id=>new Promise(r=>{const q=os('readwrite').delete(id);q.onsuccess=r;q.onerror=r});
-function frameImg(f){ if(!f||!f.blob)return Promise.resolve(null); if(imgCache.has(f.id))return imgCache.get(f.id);
-  const im=new Image(); im.src=URL.createObjectURL(f.blob); const p=new Promise(r=>{im.onload=()=>r(im);im.onerror=()=>r(null)}); imgCache.set(f.id,p); return p; }
+function frameImg(f){ if(!f||(!f.blob&&!f.file))return Promise.resolve(null); if(imgCache.has(f.id))return imgCache.get(f.id);
+  const p=(async()=>{ if(!f.blob){try{const r=await fetch(f.file);if(!r.ok)throw 0;f.blob=await r.blob()}catch(e){imgCache.delete(f.id);return null}}
+    const im=new Image(); im.src=URL.createObjectURL(f.blob); return await new Promise(r=>{im.onload=()=>r(im);im.onerror=()=>r(null)}) })();
+  imgCache.set(f.id,p); return p; }
 async function loadFrames(sel){
   try{ idb=idb||await idbOpen(); frames=await idbAll(); }catch(e){ frames=[]; msg('이 브라우저에서는 틀을 저장할 수 없어요. 크롬이나 엣지 일반 창에서 열어 주세요.',true); }
-  frames.sort((a,b)=>a.name.localeCompare(b.name,'ko'));
-  $('frameSel').innerHTML=''; if(!frames.length){const o=document.createElement('option');o.value='';o.textContent='(아직 틀이 없어요. 아래에서 추가하세요)';$('frameSel').appendChild(o)}
-  frames.forEach(f=>{const o=document.createElement('option');o.value=f.id;o.textContent=f.name;$('frameSel').appendChild(o)});
+  const bIds=new Set(BUILTIN.map(b=>b.id)), mine=frames.filter(f=>!bIds.has(f.id)).sort((a,b)=>a.name.localeCompare(b.name,'ko'));
+  const base=BUILTIN.map(b=>{const own=frames.find(f=>f.id===b.id);return own?{...own,file:b.file,edited:true}:{...structuredClone(b),builtin:true,holeDone:true}});
+  frames=[...base,...mine];
+  $('frameSel').innerHTML='';
+  const grp=(label,list)=>{if(!list.length)return;const g=document.createElement('optgroup');g.label=label;list.forEach(f=>{const o=document.createElement('option');o.value=f.id;o.textContent=f.name+(f.edited?' (내 설정)':'');g.appendChild(o)});$('frameSel').appendChild(g)};
+  grp('기본 틀',base); grp('내가 넣은 틀',mine);
   const want=sel||store.get('sf_frame'); $('frameSel').value=frames.some(f=>f.id===want)?want:(frames[0]?.id||''); selectFrame();
   if(!frames.length){$('fed').open=true;newFrame()}
 }
@@ -263,7 +270,7 @@ async function fixHole(f){ if(!f.id||!f.blob||f.holeDone)return; const hl=await 
 function fillEditor(f){
   $('fName').value=f.name||''; $('fWho').value=f.who||''; $('fVy').value=f.video.y; $('fVh').value=f.video.h; $('fFit').value=f.video.fit; $('fZ').value=Math.round((f.video.zoom||1)*100); $('fZv').textContent=$('fZ').value+'%';
   $('fTpl').value=f.src.tpl; $('fSy').value=f.src.y; $('fSs').value=f.src.size; $('fSc').value=f.src.color; $('fImg').value='';
-  $('fDel').disabled=!f.id; delete $('fSave').dataset.new; $('fPreset').value=f.video.fit==='cover'?'kms':'kimyong'; setDirty(false);
+  $('fDel').disabled=!f.id||!!f.builtin; $('fDel').dataset.label=f.edited?'기본값으로 되돌리기':'이 틀 지우기'; $('fDel').textContent=$('fDel').dataset.label; delete $('fSave').dataset.new; $('fPreset').value=f.video.fit==='cover'?'kms':'kimyong'; setDirty(false);
 }
 let dirty=false;
 function setDirty(d){dirty=d;$('fSave').classList.toggle('dirty',d);$('fSave').textContent=d?'이 틀 저장 · 바뀐 것 저장 안 됨':'이 틀 저장'}
@@ -284,12 +291,13 @@ $('fNew').addEventListener('click',newFrame);
 $('fSave').addEventListener('click',async()=>{
   const isNew=$('fSave').dataset.new==='1'||!cur.id;
   const name=$('fName').value.trim(); if(!name) return fmsg('틀 이름을 넣어 주세요.',true);
+  if(!isNew&&!cur.blob&&cur.file) await frameImg(cur);
   let blob=editBlob||(isNew?null:cur.blob); if(!blob) return fmsg('틀 이미지를 골라 주세요.',true);
   const f={id:isNew?'f'+Date.now():cur.id,name,who:$('fWho').value.trim(),blob,holeDone:true,...editorFrame()};
   try{ idb=idb||await idbOpen(); await idbPut(f); delete $('fSave').dataset.new; imgCache.delete(f.id); editBlob=null; await loadFrames(f.id); fmsg('틀을 저장했어요: '+name); if(clips.length){redrawThumbs();if(cur.video.fit==='cover'&&clips.some(c=>!c.scenes))reframeAll()} }catch(e){ fmsg('틀 저장 실패: '+(e?.message||e),true) }
 });
-$('fDel').addEventListener('click',async()=>{ if(!cur.id)return; if($('fDel').dataset.sure!=='1'){$('fDel').dataset.sure='1';$('fDel').textContent='한 번 더 누르면 지워져요';setTimeout(()=>{$('fDel').dataset.sure='';$('fDel').textContent='이 틀 지우기'},3000);return}
-  await idbDel(cur.id); imgCache.delete(cur.id); $('fDel').dataset.sure=''; $('fDel').textContent='이 틀 지우기'; store.set('sf_frame',''); await loadFrames(); fmsg('틀을 지웠어요.') });
+$('fDel').addEventListener('click',async()=>{ if(!cur.id)return; if($('fDel').dataset.sure!=='1'){$('fDel').dataset.sure='1';$('fDel').textContent='한 번 더 누르면 지워져요';setTimeout(()=>{$('fDel').dataset.sure='';$('fDel').textContent=$('fDel').dataset.label||'이 틀 지우기'},3000);return}
+  const wasEdited=cur.edited,id=cur.id; await idbDel(id); imgCache.delete(id); $('fDel').dataset.sure=''; store.set('sf_frame',wasEdited?id:''); await loadFrames(wasEdited?id:undefined); fmsg(wasEdited?'기본 틀 설정으로 되돌렸어요.':'틀을 지웠어요.') });
 $('frameSel').addEventListener('change',()=>{selectFrame();redrawThumbs();if(cur.video.fit==='cover'&&clips.some(c=>!c.scenes))reframeAll()});
 $('fed').addEventListener('toggle',()=>drawPrev($('fed').open));
 
