@@ -241,17 +241,28 @@ function selectFrame(){
   cur=frames.find(f=>f.id===$('frameSel').value)||BLANK(); if(cur.id)store.set('sf_frame',cur.id);
   $('who').value=(cur.id&&store.get('sf_who_'+cur.id))||cur.who||''; fillEditor(cur); updSrc(); drawPrev();
   $('multiRow').hidden=cur.video.fit!=='cover'; refresh();
+  fixHole(cur);
 }
+async function fixHole(f){ if(!f.id||!f.blob)return; const hl=await holeOf(f.blob); if(!hl||cur!==f)return;
+  if(Math.abs(hl.y-f.video.y)<=4&&Math.abs(hl.h-f.video.h)<=8&&f.video.fit==='cover')return;
+  f.video={...f.video,y:hl.y,h:hl.h,fit:'cover'}; try{await idbPut(f)}catch(e){} fillEditor(f); drawPrev(); $('multiRow').hidden=false; redrawThumbs();
+  msg(`‘${f.name}’ 틀의 영상 자리를 다시 맞췄어요 (위 ${hl.y}px, 높이 ${hl.h}px, 꽉 채우기).`) }
 function fillEditor(f){
   $('fName').value=f.name||''; $('fWho').value=f.who||''; $('fVy').value=f.video.y; $('fVh').value=f.video.h; $('fFit').value=f.video.fit; $('fZ').value=Math.round((f.video.zoom||1)*100); $('fZv').textContent=$('fZ').value+'%';
   $('fTpl').value=f.src.tpl; $('fSy').value=f.src.y; $('fSs').value=f.src.size; $('fSc').value=f.src.color; $('fImg').value='';
   $('fDel').disabled=!f.id; delete $('fSave').dataset.new; $('fPreset').value=f.video.fit==='cover'?'kms':'kimyong';
 }
 let editBlob=null;
+// 틀 그림의 투명한 구멍(영상 자리)을 찾아 1080 기준 {y,h}로. 없으면 null
+async function holeOf(blob){ if(!blob)return null; const im=await new Promise(r=>{const i=new Image();i.onload=()=>r(i);i.onerror=()=>r(null);i.src=URL.createObjectURL(blob)}); if(!im)return null;
+  const W=270,H=480,c=document.createElement('canvas');c.width=W;c.height=H;const x=c.getContext('2d',{willReadFrequently:true});x.drawImage(im,0,0,W,H);const d=x.getImageData(0,0,W,H).data;
+  let best=[0,-1],st=-1; for(let r=0;r<=H;r++){let n=0;if(r<H)for(let q=0;q<W;q++)if(d[(r*W+q)*4+3]<40)n++; if(r<H&&n>W*0.9){if(st<0)st=r}else if(st>=0){if(r-1-st>best[1]-best[0])best=[st,r-1];st=-1}}
+  if(best[1]-best[0]<40)return null; const k=1920/H; const y=Math.floor(best[0]*k)-3, h=Math.ceil((best[1]+1)*k)+3-y; return {y,h} }
+async function applyHole(blob){ const hl=await holeOf(blob); if(!hl)return null; $('fVy').value=hl.y;$('fVh').value=hl.h;$('fFit').value='cover'; return hl }
 function editorFrame(){ return {video:{y:+$('fVy').value||0,h:+$('fVh').value||608,fit:$('fFit').value,zoom:(+$('fZ').value||100)/100},src:{tpl:$('fTpl').value,y:+$('fSy').value||0,size:+$('fSs').value||30,color:$('fSc').value||'#cccccc'}} }
 $('fPreset').addEventListener('change',()=>{const p=PRESET[$('fPreset').value];$('fVy').value=p.video.y;$('fVh').value=p.video.h;$('fFit').value=p.video.fit;$('fZ').value=100;$('fZv').textContent='100%';$('fTpl').value=p.src.tpl;$('fSy').value=p.src.y;$('fSs').value=p.src.size;$('fSc').value=p.src.color;drawPrev(true)});
 ['fVy','fVh','fFit','fZ','fTpl','fSy','fSs','fSc'].forEach(k=>$(k).addEventListener('input',()=>{$('fZv').textContent=$('fZ').value+'%';drawPrev(true)}));
-$('fImg').addEventListener('change',e=>{editBlob=e.target.files[0]||null;drawPrev(true)});
+$('fImg').addEventListener('change',async e=>{editBlob=e.target.files[0]||null;const hl=await applyHole(editBlob);if(hl)msg(`틀의 영상 자리를 찾아 맞췄어요 (위 ${hl.y}px, 높이 ${hl.h}px, 꽉 채우기).`);drawPrev(true)});
 function newFrame(){editBlob=null;$('fImg').value='';$('fName').value='';$('fWho').value='';$('fDel').disabled=true;$('fSave').dataset.new='1';drawPrev(true);msg('새 틀: 이름을 쓰고, 틀 이미지를 고르고, 배치를 정한 뒤 ‘이 틀 저장’을 누르세요.')}
 $('fNew').addEventListener('click',newFrame);
 $('fSave').addEventListener('click',async()=>{
@@ -277,18 +288,21 @@ function updSrc(){ $('srcPrev').textContent='들어갈 출처: '+srcText().repla
 // crop: {mode:'cover'|'all', cx:0..1}
 function compose(ctx,img,f,video,scale,crop){
   const S=scale; ctx.clearRect(0,0,1080*S,1920*S);
-  if(img) ctx.drawImage(img,0,0,1080*S,1920*S); else {ctx.fillStyle='#0b1a3a';ctx.fillRect(0,0,1080*S,1920*S)}
+  ctx.fillStyle=img?'#000':'#0b1a3a';ctx.fillRect(0,0,1080*S,1920*S);
   const {y,h,fit}=f.video;
   if(video&&video.videoWidth){
     const vw=video.videoWidth,vh=video.videoHeight;
     const full=fit==='cover'&&(!crop||crop.mode!=='all'), z=Math.max(1,f.video.zoom||1);
-    if(fit==='cover'&&!full){ctx.fillStyle='#000';ctx.fillRect(0,y*S,1080*S,h*S)}
+    if(fit==='cover'&&!full){ // 다 보이게: 양옆·위아래는 흐린 영상으로 채움(검은 화면 없음)
+      const bs=Math.max(1080/vw,h/vh), bw=1080/bs, bh=h/bs; ctx.save(); ctx.beginPath(); ctx.rect(0,y*S,1080*S,h*S); ctx.clip();
+      ctx.filter=`blur(${Math.round(24*S)}px) brightness(0.6)`; ctx.drawImage(video,(vw-bw)/2,(vh-bh)/2,bw,bh,-20*S,(y-20)*S,1120*S,(h+40)*S); ctx.restore(); }
     const sc=(full?Math.max(1080/vw,h/vh):Math.min(1080/vw,h/vh))*z;
     const dw=Math.min(1080,vw*sc), dh=Math.min(h,vh*sc), sw=dw/sc, sh=dh/sc;
     const cx=(full?(crop?.cx??0.5):0.5)*vw;
     const sx=Math.min(Math.max(0,cx-sw/2),vw-sw), sy=(vh-sh)/2;
     ctx.drawImage(video,sx,sy,sw,sh,(1080-dw)/2*S,(y+(h-dh)/2)*S,dw*S,dh*S);
   }
+  if(img) ctx.drawImage(img,0,0,1080*S,1920*S); // 틀은 영상 위에(말풍선 꼬리·테두리 살림)
   const t=srcText(f); if(t.trim()){ const ls=t.split('\n'), size=f.src.size, gap=size*1.3;
     ctx.fillStyle=f.src.color; ctx.font=`${size*S}px "GmarketSansLight","Noto Sans KR",sans-serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
     ls.forEach((l,i)=>ctx.fillText(l,540*S,(f.src.y+(i-(ls.length-1)/2)*gap)*S)); }
@@ -443,8 +457,8 @@ async function frameClip(c,f){
     if(fs.length===1) crop.cx=fs[0].cx;
     else if(fs.length>1){
       if($('multi').value==='follow'&&target){const fa=await loadFace();let best=null,bd=9;for(const x of fs){if(!x.desc)continue;const d=fa.euclideanDistance(target,x.desc);if(d<bd){bd=d;best=x}}
-        if(best&&bd<0.6)crop.cx=best.cx;else crop.mode='all'}
-      else crop.mode='all'}
+        if(best&&bd<0.6)crop.cx=best.cx;else crop.cx=fs.reduce((a,x)=>a+x.cx,0)/fs.length}
+      else crop.cx=fs.reduce((a,x)=>a+x.cx,0)/fs.length}
     s.crop=crop }
   c.scenes=sc;
 }
